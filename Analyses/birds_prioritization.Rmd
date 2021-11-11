@@ -1,0 +1,152 @@
+---
+title: "RES510"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r ebird}
+#load required packages
+library(ebirdst)
+library(auk)
+library(rgbif)
+library(dplyr)
+library(here)
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rredlist)
+
+require(dplyr); require(RColorBrewer); require(ggplot2)
+require(mapdata); require(maptools)
+```
+
+Simple CSV file
+
+GBIF.org (03 November 2021) GBIF Occurrence Download https://doi.org/10.15468/dl.k49xau
+Licence CC BY-NC 4.0
+File 3 MB Simple
+Involved datasets 15
+Make sure to read the data user agreement and citation guidelines.
+
+Darwin Core Archive File
+
+GBIF.org (03 November 2021) GBIF Occurrence Download https://doi.org/10.15468/dl.czeavt
+Licence CC BY-NC 4.0
+File 9 MB Darwin Core Archive
+Involved datasets 15
+Make sure to read the data user agreement and citation guidelines.
+
+Species List File
+
+GBIF.org (03 November 2021) GBIF Occurrence Download https://doi.org/10.15468/dl.a3grx5
+Licence CC BY-NC 4.0
+File 40 KB Species list
+Involved datasets 15
+Make sure to read the data user agreement and citation guidelines.
+
+Administrative areas (gadm.org) CAN.2.14_1
+Geometry POLYGON((-123.26527 49.26797,-123.26697 49.26252,-123.25981 49.25579,-123.2465 49.24606,-123.22908 49.24019,-123.22755 49.24082,-123.22685 49.2431,-123.22804 49.24575,-123.22794 49.24848,-123.22838 49.25076,-123.22928 49.25321,-123.23079 49.25658,-123.23001 49.25815,-123.23161 49.25889,-123.23238 49.26036,-123.22961 49.26188,-123.23067 49.26312,-123.23323 49.26285,-123.23777 49.26755,-123.23936 49.2688,-123.24056 49.27137,-123.242 49.27381,-123.24372 49.2776,-123.24528 49.2805,-123.25933 49.27558,-123.26388 49.272,-123.26527 49.26797))
+Scientific name Aves
+
+BC_conserv_status.csv file citation
+B.C. Conservation Data Centre. 2021. BC Species and Ecosystems Explorer. B.C. Minist. of Environ. Victoria, B.C. Available: https://a100.gov.bc.ca/pub/eswp/ (accessed Nov 10, 2021).
+
+
+
+```{r}
+
+theme_set(theme_bw())
+
+canada <- map_data("worldHires", "Canada")
+
+```
+
+```{r}
+
+# NAmap <- ggplot()  +
+#     geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+#                  fill = "white", color="black") + 
+#     coord_fixed(xlim = c(-100, -65),  ylim = c(25, 50), ratio = 1.2)
+# NAmap
+# 
+# 
+# 
+# 
+# world <- ne_countries(scale = "medium", returnclass = "sf")
+# class(world)
+
+here("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510")
+birds <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/GBIF_birds_UBC.csv", header = TRUE, sep = "\t")
+status <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/BC_conserv_status.csv", header = TRUE, sep = ",")
+
+
+plot(birds$decimalLongitude, birds$decimalLatitude)
+
+unique(birds$species)
+
+birds_fltr <- birds %>%
+  filter(decimalLatitude = TRUE, decimalLongitude = TRUE, year > 1999) %>%
+  count(occurrenceStatus, species) %>%
+  arrange(n) %>%
+  filter(n >= 25)
+
+
+# test <- status  %>%
+# filter(Scientific.Name == birds_fltr$species)
+
+
+ test <- left_join(birds_fltr, status, by = c("species" = "Scientific.Name")) %>%  #few species did not have status designation, to be filled in manually later 
+  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global",)
+
+test <- occ_count(taxonKey = birds$taxonKey, georeferenced = TRUE)
+
+
+
+# library("ggspatial")
+# ggplot(data = world) +
+#     geom_sf() +
+#     annotation_scale(location = "bl", width_hint = 0.5) +
+#     annotation_north_arrow(location = "bl", which_north = "true", 
+#         pad_x = unit(0.75, "in"), pad_y = unit(0.5, "in"),
+#         style = north_arrow_fancy_orienteering) +
+#     coord_sf(xlim = c(-102.15, -74.12), ylim = c(7.65, 33.97))
+# 
+# 
+# head(birds)
+# 
+# res <- occ_search(geometry = wkt, geom_big = "bbox")$data
+# library("rgeos")
+# library("sp")
+# wktsp <- readWKT(wkt)
+# plot(wktsp)
+# coordinates(res) <- ~decimalLongitude+decimalLatitude
+# points(res)
+
+```
+
+```{r}
+test <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/ebd_US-AL-101_202103_202103_relMar-2021_SAMPLE/ebd_US-AL-101_202103_202103_relMar-2021.txt", sep = "\t")  %>%
+  auk_ebd() %>%
+  auk_bbox(bbox = c(-125, 37, -120, 52))
+
+
+test <- system.file("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/ebd_US-AL-101_202103_202103_relMar-2021_SAMPLE", package = "auk") %>%
+  auk_ebd() %>%
+  auk_bbox(bbox = c(-125, 37, -120, 52))
+
+
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
