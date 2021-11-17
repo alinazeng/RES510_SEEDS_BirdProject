@@ -15,19 +15,19 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ```{r ebird}
 #load required packages
-library(ebirdst)
-library(auk)
-library(rgbif)
+#library(ebirdst)
+#library(auk)
+#library(rgbif)
 library(dplyr)
 library(here)
 library(ggplot2)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
-library(rredlist)
+#library(sf)
+#library(rnaturalearth)
+#library(rnaturalearthdata)
+#library(rredlist)
 
 require(dplyr); require(RColorBrewer); require(ggplot2)
-require(mapdata); require(maptools)
+#require(mapdata); require(maptools)
 ```
 
 Simple CSV file
@@ -67,85 +67,68 @@ B.C. Conservation Data Centre. 2021. BC Species and Ecosystems Explorer. B.C. Mi
 
 theme_set(theme_bw())
 
-canada <- map_data("worldHires", "Canada")
+#canada <- map_data("worldHires", "Canada")
 
 ```
 
 ```{r}
 
-# NAmap <- ggplot()  +
-#     geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
-#                  fill = "white", color="black") + 
-#     coord_fixed(xlim = c(-100, -65),  ylim = c(25, 50), ratio = 1.2)
-# NAmap
-# 
-# 
-# 
-# 
-# world <- ne_countries(scale = "medium", returnclass = "sf")
-# class(world)
-
-here("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510")
-birds <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/GBIF_birds_UBC.csv", header = TRUE, sep = "\t")
-status <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/BC_conserv_status.csv", header = TRUE, sep = ",")
-
+here()
+birds <- read.delim(here("input","GBIF_birds_UBC.csv"), header = TRUE, sep = "\t")
+status <- read.delim(here("input","BC_conserv_status.csv"), header = TRUE, sep = ",")
 
 plot(birds$decimalLongitude, birds$decimalLatitude)
 
 unique(birds$species)
 
 birds_fltr <- birds %>%
-  filter(decimalLatitude = TRUE, decimalLongitude = TRUE, year > 1999) %>%
-  count(occurrenceStatus, species) %>%
-  arrange(n) %>%
-  filter(n >= 25)
+  filter(decimalLatitude = TRUE, decimalLongitude = TRUE, year > 1999) %>% #filter for observations with a latitude and longitude, and to year 2000 or more recent
+  count(occurrenceStatus, species) %>% #count number of observations per species
+  arrange(n) %>% #assign number of observations to "n" variable
+  filter(n >= 5) #filter for minimum number of observations allowed, currently 5 (ask a prof?)
 
 
 # test <- status  %>%
 # filter(Scientific.Name == birds_fltr$species)
 
 
- test <- left_join(birds_fltr, status, by = c("species" = "Scientific.Name")) %>%  #few species did not have status designation, to be filled in manually later 
-  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global",)
+ birds_list <- left_join(birds_fltr, status, by = c("species" = "Scientific.Name")) %>%  #few species did not have status designation, to be filled in manually later 
+  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global") #select columns to retain
+ 
 
-test <- occ_count(taxonKey = birds$taxonKey, georeferenced = TRUE)
+ birds_list <-  birds_list %>% #convert global status to number, see: https://www.env.gov.bc.ca/atrisk/help/grank.htm
+  mutate(GlobalNum = case_when(
+    startsWith(Global, "G5") ~ 1,
+    startsWith(Global, "G4") ~ 2,
+    startsWith(Global, "G3") ~ 3
+    ))
 
+ birds_list  <-  birds_list %>% #convert BC status to number, 0 for all non-native, 1-3 for native, see: https://www.env.gov.bc.ca/atrisk/help/list.htm
+  mutate(BCNum = case_when(
+    startsWith(BC.List, c("Acc","Exo", "Un" )) ~ 0,
+    startsWith(BC.List, "Yel") ~ 1,
+    startsWith(BC.List, "Bl") ~ 2,
+    startsWith(BC.List, "Red") ~ 3,
+    ))
 
+ birds_list  <-  birds_list %>% #convert provincial status to number, 0 for no concern, 4 for critically imperiled. see: https://www.env.gov.bc.ca/atrisk/help/srank.htm 
+  mutate(ProvNum = case_when(
+    grepl("S1", Provincial) ~ 4,
+    grepl("S2", Provincial) ~ 3,
+    grepl("S3", Provincial) ~ 2,
+    grepl("S4", Provincial) ~ 1,
+    grepl("S5", Provincial) ~ 0,
+    ))
+ birds_list <-  birds_list %>%
+  mutate(score = ProvNum*BCNum*GlobalNum/n)
 
-# library("ggspatial")
-# ggplot(data = world) +
-#     geom_sf() +
-#     annotation_scale(location = "bl", width_hint = 0.5) +
-#     annotation_north_arrow(location = "bl", which_north = "true", 
-#         pad_x = unit(0.75, "in"), pad_y = unit(0.5, "in"),
-#         style = north_arrow_fancy_orienteering) +
-#     coord_sf(xlim = c(-102.15, -74.12), ylim = c(7.65, 33.97))
-# 
-# 
-# head(birds)
-# 
-# res <- occ_search(geometry = wkt, geom_big = "bbox")$data
-# library("rgeos")
-# library("sp")
-# wktsp <- readWKT(wkt)
-# plot(wktsp)
-# coordinates(res) <- ~decimalLongitude+decimalLatitude
-# points(res)
+ birds_list$score.scale = scale(birds_list$score)
+ 
 
-```
+birds_list %>%
+   mutate(rank = rank(desc(score.scale)))
 
-```{r}
-test <- read.delim("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/ebd_US-AL-101_202103_202103_relMar-2021_SAMPLE/ebd_US-AL-101_202103_202103_relMar-2021.txt", sep = "\t")  %>%
-  auk_ebd() %>%
-  auk_bbox(bbox = c(-125, 37, -120, 52))
-
-
-test <- system.file("/Users/pinskylab/Documents/CHANS_lab/WinterTerm_1_2021/RES510/ebd_US-AL-101_202103_202103_relMar-2021_SAMPLE", package = "auk") %>%
-  auk_ebd() %>%
-  auk_bbox(bbox = c(-125, 37, -120, 52))
-
-
-
+birds_list_sorted <- birds_list[order(desc(birds_list$score.scale)),]
 ```
 
 
