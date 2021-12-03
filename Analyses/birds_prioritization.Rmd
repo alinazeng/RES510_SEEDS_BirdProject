@@ -181,33 +181,50 @@ birds_list %>%
 
 birds_list_sorted <- birds_list[order(desc(birds_list$score.scale)),]
 
+#########
+ birds_list1 <-  birds_list %>%
+   mutate(score = ProvNumS*GlobalNumS*nS)
+  #mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
+
+ 
+
+ birds_list1$score.scale = scale(birds_list1$score)
+ 
+
+birds_list1 %>%
+   mutate(rank = rank(desc(score.scale)))
+
+birds_list_sorted1 <- birds_list1[order(desc(birds_list1$score.scale)),]
+
+#########
+ birds_list2 <-  birds_list %>%
+   mutate(score = ProvNumS*GlobalNumS*nS*TrophicNumS*BodyMassS)
+  #mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
+
+ 
+
+ birds_list2$score.scale = scale(birds_list2$score)
+ 
+
+birds_list2 %>%
+   mutate(rank = rank(desc(score.scale)))
+
+birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
 
 #########
 
- birds_list2 <-  birds_list %>%
+ birds_list3 <-  birds_list %>%
   mutate(score = ProvNumS*GlobalNumS*nS*TrophicNumS*BodyMassS)
  
 
- birds_list2$score.scale = scale(birds_list2$score)
+ birds_list3$score.scale = scale(birds_list3$score)
  
 
-birds_list2 %>%
+birds_list3 %>%
    mutate(rank = rank(desc(score.scale)))
 
-birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
+birds_list_sorted3 <- birds_list3[order(desc(birds_list3$score.scale)),]
 
-#########
- birds_list2 <-  birds_list %>%
-  mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
- 
-
- birds_list2$score.scale = scale(birds_list2$score)
- 
-
-birds_list2 %>%
-   mutate(rank = rank(desc(score.scale)))
-
-birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
 
 
 
