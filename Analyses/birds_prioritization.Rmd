@@ -21,6 +21,7 @@ When you click the **Knit** button a document will be generated that includes bo
 library(dplyr)
 library(here)
 library(ggplot2)
+library(traitdata)
 #library(sf)
 #library(rnaturalearth)
 #library(rnaturalearthdata)
@@ -64,8 +65,11 @@ B.C. Conservation Data Centre. 2021. BC Species and Ecosystems Explorer. B.C. Mi
 
 
 ```{r}
+#functions
 
-theme_set(theme_bw())
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+range01 <-function(x, ...) {(x - min(x, ...)) / (max(x, ...) - min(x, ...))}
+#theme_set(theme_bw())
 
 #canada <- map_data("worldHires", "Canada")
 
@@ -76,6 +80,7 @@ theme_set(theme_bw())
 here()
 birds <- read.delim(here("input","GBIF_birds_UBC.csv"), header = TRUE, sep = "\t")
 status <- read.delim(here("input","BC_conserv_status.csv"), header = TRUE, sep = ",")
+data("elton_birds")
 
 plot(birds$decimalLongitude, birds$decimalLatitude)
 
@@ -94,6 +99,13 @@ birds_fltr <- birds %>%
 
  birds_list <- left_join(birds_fltr, status, by = c("species" = "Scientific.Name")) %>%  #few species did not have status designation, to be filled in manually later 
   select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global") #select columns to retain
+ 
+ birds_list <- left_join(birds_list, elton_birds, by = c("species" = "scientificNameStd")) %>%  #few species did not have status designation, to be filled in manually later 
+  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global","Diet.5Cat", "BodyMass.Value")
+ 
+ 
+ # include higher trophic level first list
+ # filter by high trophic level species list
  
 
  birds_list <-  birds_list %>% #convert global status to number, see: https://www.env.gov.bc.ca/atrisk/help/grank.htm
@@ -119,8 +131,47 @@ birds_fltr <- birds %>%
     grepl("S4", Provincial) ~ 1,
     grepl("S5", Provincial) ~ 0,
     ))
+ 
+  birds_list  <-  birds_list %>% #convert provincial status to number, 0 for no concern, 4 for critically imperiled. see: https://www.env.gov.bc.ca/atrisk/help/srank.htm 
+  mutate(TrophicNum = case_when(
+    startsWith(Diet.5Cat, "Vert") ~ 4,
+    startsWith(Diet.5Cat, "Inv") ~ 3,
+    startsWith(Diet.5Cat, "Omni") ~ 2,
+    startsWith(Diet.5Cat, c("Plant", "Frui")) ~ 1,
+    ))
+  
+ 
+ # birds_list  <-  birds_list %>% #convert provincial status to number, 0 for no concern, 4 for critically imperiled. see: https://www.env.gov.bc.ca/atrisk/help/srank.htm 
+#    mutate(ProvNumS = scale(ProvNum)) %>%
+#    mutate(GlobalNumS = scale(GlobalNum)) %>%
+#    mutate(BCNumS = scale(BCNum)) %>%
+  
+  
+
+  
+# birds_list$ProvNumS = scale(birds_list$ProvNum, na.rm = T)  
+# birds_list$GlobalNumS = range01(birds_list$GlobalNum, na.rm = T)  
+# birds_list$BCNumS = range01(birds_list$BCNum, na.rm = T)  
+# birds_list$nS = scale(birds_list$n) 
+# birds_list$TrophicNumS = range01(birds_list$TrophicNum, na.rm = T)  
+# birds_list$BodyMassS = range01(birds_list$BodyMass.Value, na.rm = T) 
+#   
+birds_list$ProvNumS = range01(birds_list$ProvNum, na.rm = T)  
+birds_list$GlobalNumS = range01(birds_list$GlobalNum, na.rm = T)  
+birds_list$BCNumS = range01(birds_list$BCNum, na.rm = T)  
+birds_list$nS = range01((1/birds_list$n), na.rm = T) 
+birds_list$TrophicNumS = range01(birds_list$TrophicNum, na.rm = T)  
+birds_list$BodyMassS = range01(birds_list$BodyMass.Value, na.rm = T) 
+
+# birds_list$ProvNumS = scale(birds_list$ProvNum)  
+# birds_list$GlobalNumS = scale(birds_list$GlobalNum)  
+# birds_list$BCNumS = scale(birds_list$BCNum)  
+# birds_list$nS = scale(birds_list$n)  
+#  
+ 
  birds_list <-  birds_list %>%
-  mutate(score = ProvNum*BCNum*GlobalNum/n)
+  mutate(score = ProvNumS+BCNumS+GlobalNumS+(nS*-1))
+ 
 
  birds_list$score.scale = scale(birds_list$score)
  
@@ -129,6 +180,37 @@ birds_list %>%
    mutate(rank = rank(desc(score.scale)))
 
 birds_list_sorted <- birds_list[order(desc(birds_list$score.scale)),]
+
+
+#########
+
+ birds_list2 <-  birds_list %>%
+  mutate(score = ProvNumS*GlobalNumS*nS*TrophicNumS*BodyMassS)
+ 
+
+ birds_list2$score.scale = scale(birds_list2$score)
+ 
+
+birds_list2 %>%
+   mutate(rank = rank(desc(score.scale)))
+
+birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
+
+#########
+ birds_list2 <-  birds_list %>%
+  mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
+ 
+
+ birds_list2$score.scale = scale(birds_list2$score)
+ 
+
+birds_list2 %>%
+   mutate(rank = rank(desc(score.scale)))
+
+birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
+
+
+
 ```
 
 
