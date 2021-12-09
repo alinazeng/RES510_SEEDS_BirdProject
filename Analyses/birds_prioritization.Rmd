@@ -18,16 +18,17 @@ When you click the **Knit** button a document will be generated that includes bo
 #library(ebirdst)
 #library(auk)
 #library(rgbif)
-library(dplyr)
 library(here)
 library(ggplot2)
 library(traitdata)
+library(matrixStats)
+library(dplyr)
 #library(sf)
 #library(rnaturalearth)
 #library(rnaturalearthdata)
 #library(rredlist)
 
-require(dplyr); require(RColorBrewer); require(ggplot2)
+#require(dplyr); require(RColorBrewer); require(ggplot2)
 #require(mapdata); require(maptools)
 ```
 
@@ -67,7 +68,7 @@ B.C. Conservation Data Centre. 2021. BC Species and Ecosystems Explorer. B.C. Mi
 ```{r}
 #functions
 
-range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+#range01 <- function(x){(x-min(x))/(max(x)-min(x))}
 range01 <-function(x, ...) {(x - min(x, ...)) / (max(x, ...) - min(x, ...))}
 #theme_set(theme_bw())
 
@@ -80,15 +81,17 @@ range01 <-function(x, ...) {(x - min(x, ...)) / (max(x, ...) - min(x, ...))}
 here()
 birds <- read.delim(here("input","GBIF_birds_UBC.csv"), header = TRUE, sep = "\t")
 status <- read.delim(here("input","BC_conserv_status.csv"), header = TRUE, sep = ",")
+survey <- read.delim(here("input","Survey_12_1_21.csv"), header = TRUE, sep = ",",  na.strings=c("","NA"))
 data("elton_birds")
 
-plot(birds$decimalLongitude, birds$decimalLatitude)
 
-unique(birds$species)
+#plot(birds$decimalLongitude, birds$decimalLatitude)
+
+#unique(birds$species)
 
 birds_fltr <- birds %>%
-  filter(decimalLatitude = TRUE, decimalLongitude = TRUE, year > 1999) %>% #filter for observations with a latitude and longitude, and to year 2000 or more recent
-  count(occurrenceStatus, species) %>% #count number of observations per species
+  filter(decimalLatitude = TRUE, decimalLongitude = TRUE, year > 1999)%>% #filter for observations with a latitude and longitude, and to year 2000 or more recent
+  dplyr::count(occurrenceStatus, species) %>% #count number of observations per species
   arrange(n) %>% #assign number of observations to "n" variable
   filter(n >= 5) #filter for minimum number of observations allowed, currently 5 (ask a prof?)
 
@@ -101,7 +104,8 @@ birds_fltr <- birds %>%
   select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global") #select columns to retain
  
  birds_list <- left_join(birds_list, elton_birds, by = c("species" = "scientificNameStd")) %>%  #few species did not have status designation, to be filled in manually later 
-  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global","Diet.5Cat", "BodyMass.Value")
+  select("occurrenceStatus", "species", "n", "English.Name", "Provincial", "BC.List", "Global","Diet.5Cat", "BodyMass.Value", "PelagicSpecialist") %>% #assign number of observations to "n" variable
+  filter(PelagicSpecialist == 0)
  
  
  # include higher trophic level first list
@@ -183,7 +187,7 @@ birds_list_sorted <- birds_list[order(desc(birds_list$score.scale)),]
 
 #########
  birds_list1 <-  birds_list %>%
-   mutate(score = ProvNumS*GlobalNumS*nS)
+   mutate(score = ProvNumS+GlobalNumS+nS)
   #mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
 
  
@@ -196,9 +200,22 @@ birds_list1 %>%
 
 birds_list_sorted1 <- birds_list1[order(desc(birds_list1$score.scale)),]
 
+
 #########
+
+rare_weight <- mean(as.integer(survey$Q13_4_infreq[-c(1,2)]), na.rm = TRUE)
+loc_weight <- mean(as.integer(survey$Q13_6_local_threat[-c(1,2)]), na.rm = TRUE)
+glob_weight <- mean(as.integer(survey$Q13_8_glob_threat[-c(1,2)]), na.rm = TRUE)
+
+
+rare_weight <- 4.5/rare_weight
+loc_weight <- 4.5/loc_weight
+glob_weight <- 4.5/glob_weight
+
+
+
  birds_list2 <-  birds_list %>%
-   mutate(score = ProvNumS*GlobalNumS*nS*TrophicNumS*BodyMassS)
+   mutate(score = (loc_weight*ProvNumS)+(glob_weight*GlobalNumS)+(rare_weight*nS))
   #mutate(score = ProvNumS*(0.5*GlobalNumS)*(0.5*nS)*TrophicNumS*(0.5*BodyMassS))
 
  
@@ -214,7 +231,7 @@ birds_list_sorted2 <- birds_list2[order(desc(birds_list2$score.scale)),]
 #########
 
  birds_list3 <-  birds_list %>%
-  mutate(score = ProvNumS*GlobalNumS*nS*TrophicNumS*BodyMassS)
+  mutate(score = (loc_weight*ProvNumS)+(glob_weight*GlobalNumS)+(rare_weight*nS)+TrophicNumS+BodyMassS)
  
 
  birds_list3$score.scale = scale(birds_list3$score)
@@ -226,9 +243,48 @@ birds_list3 %>%
 birds_list_sorted3 <- birds_list3[order(desc(birds_list3$score.scale)),]
 
 
+birds_list_client1 <- birds_list_sorted3 %>% filter(TrophicNum <= 3, na.rm = TRUE)
+#birds_list_client2 <- birds_list_sorted3 %>% filter(TrophicNum != 3, na.rm = TRUE)
+birds_list_client2 <- birds_list_sorted3 %>% filter(TrophicNum <= 2, na.rm = TRUE)
+birds_list_client3 <- birds_list_sorted3 %>% filter(TrophicNum <= 1, na.rm = TRUE)
 
 
+top20 <- birds_list_sorted3[c(1:20),c(2,4)]
+top20$rank <- 1:20
+
+write.csv(top20, file = "top20.csv")
+```
+```{r}
+test<- survey[-c(1,2),c(31:38)]
+
+test <- sapply(test, as.integer)
+means<- colMeans(test,na.rm = TRUE)
+sd <- colSds(test,na.rm = TRUE)
+names <- colnames(test)
+
+names <- c('native', 'non-native', 'common', 'infrequent','locally secure', 'locally threatened', 'globally secure', 'globally threatened')
+
+
+
+new.df <- data.frame(names,means, sd)
+
+ 
+p <- ggplot(new.df, aes(x=names, y=means)) + 
+     geom_errorbar(aes(ymin=means-sd, ymax=means+sd), width=.2) +
+     geom_line() +
+    geom_point() + scale_y_reverse ( limits = c ( 9, 0 ))+
+  theme(axis.text.x = element_text(angle = -45, size=10)) + ylab("Avg. Ranking")+ xlab("")
+p
 ```
 
+
+```{r}
+#make map from lat/lon points
+
+rare_weight <- mean(as.integer(survey$Q13_4_infreq[-c(1,2)]), na.rm = TRUE)
+loc_weight <- mean(as.integer(survey$Q13_6_local_threat[-c(1,2)]), na.rm = TRUE)
+glob_weight <- mean(as.integer(survey$Q13_8_glob_threat[-c(1,2)]), na.rm = TRUE)
+
+```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
